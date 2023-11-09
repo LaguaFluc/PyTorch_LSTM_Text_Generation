@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 
-
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class CustomLSTM(nn.Module):
     def __init__(
         self, 
@@ -41,13 +41,13 @@ class CustomLSTM(nn.Module):
         initrange = self.initrange
         hidden = torch.empty([self.D * self.num_layers, batch_size, self.hidden_size])
         torch.nn.init.uniform_(hidden, -initrange, initrange)
-        return hidden
+        return hidden.to(device)
 
     def init_cell(self, batch_size):
         initrange = self.initrange
         cell = torch.empty([self.D * self.num_layers, batch_size, self.hidden_size])
         torch.nn.init.uniform_(cell, -initrange, initrange)
-        return cell
+        return cell.to(device)
     
     def init_weights(self) -> None:
         initrange = self.initrange

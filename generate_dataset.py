@@ -5,16 +5,21 @@ from torchtext.datasets import WikiText2
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
+from typing import Tuple
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def data_process(raw_text_iter: dataset.IterableDataset) -> Tensor:
+def data_process(raw_text_iter) -> torch.Tensor:
     """Converts raw text into a flat Tensor."""
+    train_iter = WikiText2(split='train')
+    tokenizer = get_tokenizer('basic_english')
+    vocab = build_vocab_from_iterator(map(tokenizer, train_iter), specials=['<unk>'])
+    vocab.set_default_index(vocab['<unk>'])
     data = [torch.tensor(
         vocab(tokenizer(item)
         ), dtype=torch.long) for item in raw_text_iter]
     return torch.cat(tuple(filter(lambda t: t.numel() > 0, data)))
 
-def batchify(data: Tensor, bsz: int) -> Tensor:
+def batchify(data: torch.Tensor, bsz: int) -> torch.Tensor:
     """Divides the data into ``bsz`` separate sequences, removing extra elements
     that wouldn't cleanly fit.
 
@@ -54,7 +59,7 @@ def get_dataset(batch_size: int, eval_batch_size: int):
     return train_data, val_data, test_data
 
 bptt = 35
-def get_batch(source: Tensor, i: int) -> Tuple[Tensor, Tensor]:
+def get_batch(source: torch.Tensor, i: int) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Args:
         source: Tensor, shape ``[full_seq_len, batch_size]``

@@ -12,6 +12,8 @@ from torchtext.datasets import WikiText2
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
+import math
+
 from generate_dataset import data_process, batchify, get_batch
 from generate_dataset import get_dataset
 from generate_dataset import get_init_dataset
@@ -50,12 +52,12 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 # ======================================
 # 3. train model
 # ======================================
-train(model, n_epochs, criterion, optimizer, scheduler)
+train(train_data, eval_data, model, n_epochs, criterion, optimizer, scheduler, vocab_size)
 
 # ======================================
 # 4. evaluate model
 # ======================================
-test_loss = evaluate(model, test_data)
+test_loss = evaluate(model, test_data, criterion, vocab_size)
 test_ppl = math.exp(test_loss)
 print('=' * 89)
 print(f'| End of training | test loss {test_loss:5.2f} | '
