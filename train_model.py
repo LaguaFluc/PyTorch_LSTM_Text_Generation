@@ -56,7 +56,12 @@ def train(
     best_val_loss = float('inf')
 
     # with TemporaryDirectory() as tempdir:
-    best_model_params_path = os.path.join(tempdir, "best_model_params.pt")
+    import os
+    import pathlib
+
+    cwd = pathlib.Path(os.getcwd())
+    best_model_params_path = cwd / "best_model_params.pt"
+    # best_model_params_path = os.path.join(cwd, "best_model_params.pt")
 
     for epoch in range(1, n_epochs + 1):
         epoch_start_time = time.time()

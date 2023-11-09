@@ -1,4 +1,5 @@
 
+import torch
 
 from torchtext.datasets import WikiText2
 from torchtext.data.utils import get_tokenizer
@@ -70,6 +71,8 @@ def get_batch(source: Tensor, i: int) -> Tuple[Tensor, Tensor]:
 
 
 if __name__ == "__main__":
+    vocab, vocab_size = get_init_dataset()
+    train_data, val_data, test_data = get_dataset(20, 10)
     print(train_data.shape)
     print(val_data.shape)
     print(test_data.shape)
