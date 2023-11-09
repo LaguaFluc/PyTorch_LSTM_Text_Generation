@@ -1,0 +1,12 @@
+# 网络训练参数
+
+# 数据参数
+batch_size: 32
+eval_batch_size: 16
+input_size: 28
+hidden_size: 256
+seq_len: 10
+
+# 训练参数
+learning_rate: 0.001
+n_epochs: 1
