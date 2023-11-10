@@ -12,7 +12,10 @@ def data_process(raw_text_iter) -> torch.Tensor:
     """Converts raw text into a flat Tensor."""
     train_iter = WikiText2(split='train')
     tokenizer = get_tokenizer('basic_english')
-    vocab = build_vocab_from_iterator(map(tokenizer, train_iter), specials=['<unk>'])
+    vocab = build_vocab_from_iterator(
+        map(tokenizer, train_iter), 
+        specials=['<unk>', '<sos>', '<eos>']
+        )
     vocab.set_default_index(vocab['<unk>'])
     data = [torch.tensor(
         vocab(tokenizer(item)
@@ -38,7 +41,10 @@ def batchify(data: torch.Tensor, bsz: int) -> torch.Tensor:
 def get_init_dataset():
     train_iter = WikiText2(split='train')
     tokenizer = get_tokenizer('basic_english')
-    vocab = build_vocab_from_iterator(map(tokenizer, train_iter), specials=['<unk>'])
+    vocab = build_vocab_from_iterator(
+        map(tokenizer, train_iter), 
+        specials=['<unk>', '<sos>', '<eos>']
+        )
     vocab.set_default_index(vocab['<unk>'])
     return vocab, len(vocab)
 
@@ -70,14 +76,23 @@ def get_batch(source: torch.Tensor, i: int) -> Tuple[torch.Tensor, torch.Tensor]
         target has shape ``[seq_len * batch_size]``
     """
     seq_len = min(bptt, len(source) - 1 - i)
+    source = source
     data = source[i:i+seq_len]
-    target = source[i+1:i+1+seq_len].reshape(-1)
+    target = source[i+1:i+1+seq_len]
     return data, target
 
 
 if __name__ == "__main__":
     vocab, vocab_size = get_init_dataset()
-    train_data, val_data, test_data = get_dataset(20, 10)
+    batch_size = 20
+    eval_batch_size = 10
+    train_data, val_data, test_data = get_dataset(batch_size, eval_batch_size)
+    
+    data, target = get_batch(train_data, 0)
+    print(data.shape, data)
+    print(target.shape, target)
+
+    print(vocab_size)
     print(train_data.shape)
     print(val_data.shape)
     print(test_data.shape)

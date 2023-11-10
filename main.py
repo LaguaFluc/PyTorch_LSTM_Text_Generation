@@ -18,7 +18,7 @@ from generate_dataset import data_process, batchify, get_batch
 from generate_dataset import get_dataset
 from generate_dataset import get_init_dataset
 from build_model import CustomLSTM
-from train_model import train_epoch, train, evaluate
+from train_model import train_epoch, train, evaluate, predict
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # ======================================
@@ -52,7 +52,8 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 # ======================================
 # 3. train model
 # ======================================
-train(train_data, eval_data, model, n_epochs, criterion, optimizer, scheduler, vocab_size)
+# train(train_data, eval_data, model, n_epochs, criterion, optimizer, scheduler, vocab_size)
+model.load_state_dict(torch.load("./best_model_params.pt"))
 
 # ======================================
 # 4. evaluate model
@@ -63,3 +64,10 @@ print('=' * 89)
 print(f'| End of training | test loss {test_loss:5.2f} | '
       f'test ppl {test_ppl:8.2f}')
 print('=' * 89)
+
+# ======================================
+# 5. get results
+# ======================================
+input_words = "Homarus gammarus is a large"
+predicted_words = predict(model, input_words, 5, vocab_size, vocab)
+print("predicted words: ", predicted_words)

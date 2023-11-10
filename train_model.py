@@ -1,6 +1,7 @@
 
 import torch
 import torch.nn as nn
+import torchtext
 
 from tempfile import TemporaryDirectory
 
@@ -29,8 +30,11 @@ def train_epoch(
     for batch, i in enumerate(range(0, train_data.size(0) - 1, bptt)):
         data, targets = get_batch(train_data, i)
         output = model(data)
-        output_flat = output.view(-1, vocab_size)
-        loss = criterion(output_flat, targets)
+        # print(output.shape)
+        # output_flat = output.view(-1, vocab_size)
+        # print(output_flat.shape, targets.shape)
+        # loss = criterion(output_flat, targets)
+        loss = criterion(output.transpose(-1, -2), targets)
 
         optimizer.zero_grad()
         loss.backward()
@@ -113,9 +117,29 @@ def evaluate(
             data, targets = get_batch(eval_data, i)
             seq_len = data.size(0)
             output = model(data)
-            output_flat = output.view(-1, vocab_size)
-            total_loss += seq_len * criterion(output_flat, targets).item()
+            # output_flat = output.view(-1, vocab_size)
+            # total_loss += seq_len * criterion(output_flat, targets).item()
+            total_loss += seq_len * criterion(output.transpose(-1, -2), targets).item()
     return total_loss / (len(eval_data) - 1)
 
+def predict(
+    model: nn.Module,
+    text: str,
+    next_words: int,
+    vocab_size: int,
+    vocab: torchtext.vocab.Vocab
+):
+    model.eval()
+    words = text.split(' ')
+    # state_h, state_c = model.init_state(1)
+    for i in range(0, next_words):
+        x = torch.tensor([[vocab[w] for w in words[i:]]])
+        # y_pred, (state_h, state_c) = model(x, (state_h, state_c))
+        y_pred = model(x)
+        last_word_logits = y_pred[0][-1]
+
+        _, topi = torch.topk(last_word_logits, 1)
+        words.append(vocab.lookup_token(topi.item()))
+    return ' '.join(words)
 
 
