@@ -11,6 +11,33 @@ import math
 from generate_dataset import get_batch
 from build_model import CustomLSTM
 
+import logging
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# 创建一个logger
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)  # Log等级总开关
+
+# 创建一个handler，用于写入日志文件
+logfile = './pytorch_lstm_text_generation_log.log'
+fh = logging.FileHandler(logfile, mode='a')
+fh.setLevel(logging.DEBUG)  # 输出到file的log等级的开关
+
+# 再创建一个handler，用于输出到控制台
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)  # 输出到console的log等级的开关
+
+# 定义handler的输出格式
+formatter = logging.Formatter("%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s")
+fh.setFormatter(formatter)
+ch.setFormatter(formatter)
+
+# 将logger添加到handler里面
+logger.addHandler(fh)
+logger.addHandler(ch)
+
+
 def train_epoch(
     epoch_idx: int,
     train_data: torch.Tensor,
@@ -47,8 +74,8 @@ def train_epoch(
             ms_per_batch = (time.time() - start_time) * 1000 / log_interval
             cur_loss = total_loss / log_interval
             ppl = math.exp(cur_loss)
-            print(f'| epoch_idx {epoch_idx:3d} | {batch:5d}/{num_batches:5d} batches | '
-                  f'lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | '
+            logger.debug(f'| epoch_idx {epoch_idx:3d} | {batch:5d}/{num_batches:5d} batches | '
+                  f'lr {lr:02.5f} | ms/batch {ms_per_batch:5.2f} | '
                   f'loss {cur_loss:5.2f} | ppl {ppl:8.2f}')
             total_loss = 0
             start_time = time.time()
@@ -88,10 +115,10 @@ def train(
         val_loss = evaluate(model, eval_data, criterion, vocab_size)
         val_ppl = math.exp(val_loss)
         elapsed = time.time() - epoch_start_time
-        print('-' * 89)
-        print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
-            f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
-        print('-' * 89)
+        logger.info('-' * 89)
+        logger.info(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
+            f'valid loss {val_loss:5.5f} | valid ppl {val_ppl:8.2f}')
+        logger.info('-' * 89)
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -133,7 +160,7 @@ def predict(
     words = text.split(' ')
     # state_h, state_c = model.init_state(1)
     for i in range(0, next_words):
-        x = torch.tensor([[vocab[w] for w in words[i:]]])
+        x = torch.tensor([[vocab[w] for w in words[i:]]]).to(device)
         # y_pred, (state_h, state_c) = model(x, (state_h, state_c))
         y_pred = model(x)
         last_word_logits = y_pred[0][-1]

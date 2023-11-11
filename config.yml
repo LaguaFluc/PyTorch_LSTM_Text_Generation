@@ -8,5 +8,5 @@ hidden_size: 256
 seq_len: 10
 
 # 训练参数
-learning_rate: 0.001
+learning_rate: 0.01
 n_epochs: 1

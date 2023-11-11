@@ -20,6 +20,8 @@ from generate_dataset import get_init_dataset
 from build_model import CustomLSTM
 from train_model import train_epoch, train, evaluate, predict
 
+from train_model import logger
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # ======================================
 # 1. generate data
@@ -60,14 +62,14 @@ model.load_state_dict(torch.load("./best_model_params.pt"))
 # ======================================
 test_loss = evaluate(model, test_data, criterion, vocab_size)
 test_ppl = math.exp(test_loss)
-print('=' * 89)
-print(f'| End of training | test loss {test_loss:5.2f} | '
+logger.info('=' * 89)
+logger.info(f'| End of training | test loss {test_loss:5.2f} | '
       f'test ppl {test_ppl:8.2f}')
-print('=' * 89)
+logger.info('=' * 89)
 
 # ======================================
 # 5. get results
 # ======================================
 input_words = "Homarus gammarus is a large"
 predicted_words = predict(model, input_words, 5, vocab_size, vocab)
-print("predicted words: ", predicted_words)
+logger.info(f"predicted words: %s" % predicted_words)
