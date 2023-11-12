@@ -14,9 +14,10 @@ from torchtext.vocab import build_vocab_from_iterator
 
 import math
 
-from generate_dataset import data_process, batchify, get_batch
-from generate_dataset import get_dataset
-from generate_dataset import get_init_dataset
+from generate_dataset import data_process, batchify
+# from generate_dataset import get_dataset
+from generate_dataset import get_dataloader
+from generate_dataset import get_dataset_vocab
 from build_model import CustomLSTM
 from train_model import train_epoch, train, evaluate, predict
 
@@ -38,8 +39,8 @@ with open("./config.yml", "r", encoding='utf-8') as f:
     n_epochs = config["n_epochs"]
     eval_batch_size = config["eval_batch_size"]
 
-vocab, vocab_size = get_init_dataset()
-train_data, eval_data, test_data = get_dataset(batch_size, eval_batch_size)
+vocab, vocab_size = get_dataset_vocab()
+train_data_loader, eval_data_loader, test_data_loader = get_dataloader(seq_len, batch_size, eval_batch_size)
 
 # ======================================
 # 2. build model
@@ -55,12 +56,13 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 # 3. train model
 # ======================================
 # train(train_data, eval_data, model, n_epochs, criterion, optimizer, scheduler, vocab_size)
+train(train_data_loader, eval_data_loader, model, n_epochs, criterion, optimizer, scheduler)
 model.load_state_dict(torch.load("./best_model_params.pt"))
 
 # ======================================
 # 4. evaluate model
 # ======================================
-test_loss = evaluate(model, test_data, criterion, vocab_size)
+test_loss = evaluate(model, test_data_loader, criterion)
 test_ppl = math.exp(test_loss)
 logger.info('=' * 89)
 logger.info(f'| End of training | test loss {test_loss:5.2f} | '
@@ -71,5 +73,5 @@ logger.info('=' * 89)
 # 5. get results
 # ======================================
 input_words = "Homarus gammarus is a large"
-predicted_words = predict(model, input_words, 5, vocab_size, vocab)
+predicted_words = predict(model, input_words, 2, seq_len, vocab)
 logger.info(f"predicted words: %s" % predicted_words)

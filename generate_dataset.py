@@ -1,11 +1,16 @@
 
 import torch
+from torch.utils.data import TensorDataset, DataLoader
 
 from torchtext.datasets import WikiText2
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
 from typing import Tuple
+
+import numpy as np
+
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def data_process(raw_text_iter) -> torch.Tensor:
@@ -14,7 +19,7 @@ def data_process(raw_text_iter) -> torch.Tensor:
     tokenizer = get_tokenizer('basic_english')
     vocab = build_vocab_from_iterator(
         map(tokenizer, train_iter), 
-        specials=['<unk>', '<sos>', '<eos>']
+        specials=['<unk>', '<sos>', '<eos>', '<pad>']
         )
     vocab.set_default_index(vocab['<unk>'])
     data = [torch.tensor(
@@ -22,7 +27,18 @@ def data_process(raw_text_iter) -> torch.Tensor:
         ), dtype=torch.long) for item in raw_text_iter]
     return torch.cat(tuple(filter(lambda t: t.numel() > 0, data)))
 
-def batchify(data: torch.Tensor, bsz: int) -> torch.Tensor:
+
+def get_dataset_vocab():
+    train_iter = WikiText2(split='train')
+    tokenizer = get_tokenizer('basic_english')
+    vocab = build_vocab_from_iterator(
+        map(tokenizer, train_iter), 
+        specials=['<unk>', '<sos>', '<eos>', '<pad>']
+        )
+    vocab.set_default_index(vocab['<unk>'])
+    return vocab, len(vocab)
+
+def batchify(data: torch.Tensor, seq_len: int, bsz: int) -> torch.Tensor:
     """Divides the data into ``bsz`` separate sequences, removing extra elements
     that wouldn't cleanly fit.
 
@@ -33,22 +49,25 @@ def batchify(data: torch.Tensor, bsz: int) -> torch.Tensor:
     Returns:
         Tensor of shape ``[N // bsz, bsz]``
     """
-    seq_len = data.size(0) // bsz
+    n_batches = data.size(0) // bsz
     data = data[:seq_len * bsz]
-    data = data.view(bsz, seq_len).t().contiguous()
-    return data.to(device)
+    x = []
+    y = []
 
-def get_init_dataset():
-    train_iter = WikiText2(split='train')
-    tokenizer = get_tokenizer('basic_english')
-    vocab = build_vocab_from_iterator(
-        map(tokenizer, train_iter), 
-        specials=['<unk>', '<sos>', '<eos>']
-        )
-    vocab.set_default_index(vocab['<unk>'])
-    return vocab, len(vocab)
+    for i in range(0, len(data) - seq_len):
+        i_end = i + seq_len
+        batch_x = data[i:i + seq_len]
+        x.append(batch_x)
+        batch_y = data[i_end]
+        y.append(batch_y)
 
-def get_dataset(batch_size: int, eval_batch_size: int):
+    x = torch.from_numpy(np.asarray(x))
+    y = torch.from_numpy(np.asarray(y))
+    data = TensorDataset(x, y)
+    data_loader = DataLoader(data, shuffle=True, batch_size=bsz)
+    return data_loader
+
+def get_dataloader(seq_len: int, batch_size: int, eval_batch_size: int):
     # ``train_iter`` was "consumed" by the process of building the vocab,
     # so we have to create it again
     train_iter, val_iter, test_iter = WikiText2()
@@ -56,43 +75,20 @@ def get_dataset(batch_size: int, eval_batch_size: int):
     val_data = data_process(val_iter)
     test_data = data_process(test_iter)
 
-    # batch_size = 20
-    # eval_batch_size = 10
-    train_data = batchify(train_data, batch_size)  # shape ``[seq_len, batch_size]``
-    val_data = batchify(val_data, eval_batch_size)
-    test_data = batchify(test_data, eval_batch_size)
+    train_data_loader = batchify(train_data, seq_len, batch_size)  # shape ``[seq_len, batch_size]``
+    val_data_loader = batchify(val_data, seq_len, eval_batch_size)
+    test_data_loader = batchify(test_data, seq_len, eval_batch_size)
 
-    return train_data, val_data, test_data
-
-bptt = 35
-def get_batch(source: torch.Tensor, i: int) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Args:
-        source: Tensor, shape ``[full_seq_len, batch_size]``
-        i: int
-
-    Returns:
-        tuple (data, target), where data has shape ``[seq_len, batch_size]`` and
-        target has shape ``[seq_len * batch_size]``
-    """
-    seq_len = min(bptt, len(source) - 1 - i)
-    source = source
-    data = source[i:i+seq_len]
-    target = source[i+1:i+1+seq_len]
-    return data, target
-
+    return train_data_loader, val_data_loader, test_data_loader
 
 if __name__ == "__main__":
-    vocab, vocab_size = get_init_dataset()
-    batch_size = 20
-    eval_batch_size = 10
-    train_data, val_data, test_data = get_dataset(batch_size, eval_batch_size)
-    
-    data, target = get_batch(train_data, 0)
-    print(data.shape, data)
-    print(target.shape, target)
-
-    print(vocab_size)
-    print(train_data.shape)
-    print(val_data.shape)
-    print(test_data.shape)
+    # vocab, vocab_size = get_dataset_vocab()
+    seq_len = 10
+    batch_size = 32
+    eval_batch_size = 16
+    train_data_loader, eval_data_loader, test_data_loader = get_dataloader(seq_len, batch_size, eval_batch_size)
+    for batch_idx, data in enumerate(train_data_loader):
+        input_word_vector, output_word_vector = data
+        print("data.shape: ", input_word_vector.shape)
+        print("target.shape: ", output_word_vector.shape)
+        break

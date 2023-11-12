@@ -8,7 +8,6 @@ from tempfile import TemporaryDirectory
 import time
 import math
 
-from generate_dataset import get_batch
 from build_model import CustomLSTM
 
 import logging
@@ -37,31 +36,24 @@ ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
 
-
 def train_epoch(
     epoch_idx: int,
-    train_data: torch.Tensor,
+    data_loader,
     model: nn.Module,
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler,
-    vocab_size: int
-    ) -> None:
-    model.train()  # turn on train mode
+    ) -> nn.Module:
+    model.train()
     total_loss = 0.
     log_interval = 200
     start_time = time.time()
-    
-    bptt = 35
-    num_batches = len(train_data) // bptt
-    for batch, i in enumerate(range(0, train_data.size(0) - 1, bptt)):
-        data, targets = get_batch(train_data, i)
-        output = model(data)
-        # print(output.shape)
-        # output_flat = output.view(-1, vocab_size)
-        # print(output_flat.shape, targets.shape)
-        # loss = criterion(output_flat, targets)
-        loss = criterion(output.transpose(-1, -2), targets)
+
+    for batch_idx, data in enumerate(data_loader):
+        input_word_vector, output_word_vector = data
+        output = model(input_word_vector)
+        # print(output.shape, output_word_vector.shape)
+        loss = criterion(output, output_word_vector)
 
         optimizer.zero_grad()
         loss.backward()
@@ -69,12 +61,12 @@ def train_epoch(
         optimizer.step()
 
         total_loss += loss.item()
-        if batch % log_interval == 0 and batch > 0:
+        if (batch_idx + 1) % log_interval == 0 and batch_idx > 0:
             lr = scheduler.get_last_lr()[0]
             ms_per_batch = (time.time() - start_time) * 1000 / log_interval
             cur_loss = total_loss / log_interval
             ppl = math.exp(cur_loss)
-            logger.debug(f'| epoch_idx {epoch_idx:3d} | {batch:5d}/{num_batches:5d} batches | '
+            logger.debug(f'| epoch_idx {epoch_idx:3d} | {batch_idx:5d}/{num_batches:5d} batches | '
                   f'lr {lr:02.5f} | ms/batch {ms_per_batch:5.2f} | '
                   f'loss {cur_loss:5.2f} | ppl {ppl:8.2f}')
             total_loss = 0
@@ -82,14 +74,13 @@ def train_epoch(
     return model
 
 def train(
-    train_data: torch.Tensor,
-    eval_data: torch.Tensor,
+    train_data_loader,
+    eval_data_loader,
     model: nn.Module,
     n_epochs: int,
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler,
-    vocab_size: int
     ) -> nn.Module:
     best_val_loss = float('inf')
 
@@ -105,14 +96,13 @@ def train(
         epoch_start_time = time.time()
         train_epoch(
             epoch,
-            train_data,
+            train_data_loader,
             model,
             criterion,
             optimizer,
             scheduler,
-            vocab_size
             )
-        val_loss = evaluate(model, eval_data, criterion, vocab_size)
+        val_loss = evaluate(model, eval_data_loader, criterion)
         val_ppl = math.exp(val_loss)
         elapsed = time.time() - epoch_start_time
         logger.info('-' * 89)
@@ -128,45 +118,68 @@ def train(
     model.load_state_dict(torch.load(best_model_params_path)) # load best model states
     return model
 
+
 def evaluate(
     model: nn.Module, 
-    eval_data: torch.Tensor,
+    eval_data_loader, 
     criterion: nn.Module,
-    vocab_size: int
     ) -> float:
     model.eval()  # turn on evaluation mode
     total_loss = 0
-    bptt = 35
     with torch.no_grad():
         # print("eval_data.shape: ", eval_data.shape, eval_data.size())
-        end = int(eval_data.size(0))
-        for i in range(0, end - 1, bptt):
-            data, targets = get_batch(eval_data, i)
-            seq_len = data.size(0)
-            output = model(data)
-            # output_flat = output.view(-1, vocab_size)
-            # total_loss += seq_len * criterion(output_flat, targets).item()
-            total_loss += seq_len * criterion(output.transpose(-1, -2), targets).item()
-    return total_loss / (len(eval_data) - 1)
+        for batch_idx, data in enumerate(eval_data_loader):
+            input_word_vector, output_word_vector = data
+            output = model(input_word_vector)
+            total_loss += criterion(output, output_word_vector).item()
+    return total_loss / len(eval_data_loader)
 
 def predict(
     model: nn.Module,
     text: str,
     next_words: int,
-    vocab_size: int,
+    seq_len: int,
     vocab: torchtext.vocab.Vocab
 ):
     model.eval()
-    words = text.split(' ')
-    # state_h, state_c = model.init_state(1)
-    for i in range(0, next_words):
-        x = torch.tensor([[vocab[w] for w in words[i:]]]).to(device)
-        # y_pred, (state_h, state_c) = model(x, (state_h, state_c))
-        y_pred = model(x)
-        last_word_logits = y_pred[0][-1]
 
-        _, topi = torch.topk(last_word_logits, 1)
-        words.append(vocab.lookup_token(topi.item()))
-    return ' '.join(words)
+    from torchtext.data.utils import get_tokenizer
+    tokenizer = get_tokenizer('basic_english')
+
+    words = text.split(' ')
+    input_ids = [vocab(tokenizer(item)) for item in words]
+
+    # padding if input is shorter than seq_len
+    sample_len = len(input_ids)
+    pad_len = (seq_len - sample_len) if (sample_len < seq_len) else 0
+    if (sample_len <= seq_len):
+        padded_input_ids = input_ids + [[vocab['<pad>']]] * pad_len
+    else:
+        padded_input_ids = input_ids[sample_len - seq_len:]
+
+    output_words = []
+    for i in range(0, next_words):
+        # shape: (seq_len, 1)
+        input_word_vector = torch.tensor(padded_input_ids).to(device) # input_ids[i:]
+        # shape: (seq_len, )
+        input_word_vector = input_word_vector.squeeze(1)
+        # shape: (1, seq_len)
+        input_word_vector = input_word_vector.unsqueeze(0)
+        # y_pred.shape: (1, vocab_size)
+        y_pred = model(input_word_vector)
+        # topi.shape: (1, 1)
+        _, topi = torch.topk(y_pred, 1)
+        output_ids = topi.squeeze()
+        output_word_idx = output_ids.item()
+        output_words.append(vocab.lookup_token(output_word_idx))
+
+        # add output_word_idx to the end of input_ids(before padding)
+        if (pad_len == 0):
+            padded_input_ids = padded_input_ids[1:] + [[output_word_idx]]
+        else:
+            pad_len -= 1
+            padded_input_ids = padded_input_ids[1: seq_len - pad_len] + [[output_word_idx]] \
+                + [[vocab['<pad>']]] * pad_len
+    return ' '.join(output_words)
 
 

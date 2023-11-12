@@ -30,11 +30,18 @@ class CustomLSTM(nn.Module):
         self.init_weights()
 
     def forward(self, inputs):
+        """
+        inputs.shape: (batch_size, seq_len)
+        embedded.shape: (batch_size, seq_len, input_size)
+        lstm_out.shape: (batch_size, seq_len, hidden_size)
+        before output.shape: (batch_size, seq_len, vocab_size)
+        """
         self.embedded = self.embedding(inputs)
         h0 = self.init_hidden(inputs.size(0))
         c0 = self.init_cell(inputs.size(0))
         lstm_out, (hidden, cell) = self.lstm(self.embedded, (h0, c0))
         output = self.linear(lstm_out)
+        output = output[:, -1, :]
         return output
 
     def init_hidden(self, batch_size):
